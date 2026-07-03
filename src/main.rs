@@ -48,7 +48,7 @@ fn handle_connection(stream: TcpStream, routes: &[Route]) {
 
     match find_route(routes, &request.method, &request.path) {
         Some((route, path_params)) => {
-            request.params.extend(path_params);
+            request.set_path_params(path_params);
             (route.handler)(&request, &mut response);
         }
         None => {

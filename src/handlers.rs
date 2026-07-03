@@ -14,11 +14,8 @@ pub fn health() -> RouteHandler {
 /// Handles `GET /user?id=<id>`, reading `id` from the query string.
 pub fn get_user() -> RouteHandler {
     Box::new(
-        |req: &HttpRequest, res: &mut HttpResponse| match req.params.get("id") {
-            Some(id) => {
-                println!("User id =>{id}");
-                res.send(format!("location id: {id}"))
-            }
+        |req: &HttpRequest, res: &mut HttpResponse| match req.query_params.get("id") {
+            Some(id) => res.send(format!("user id: {id}")),
             None => {
                 res.status(400);
                 res.send("missing \"id\" query param");
@@ -30,11 +27,8 @@ pub fn get_user() -> RouteHandler {
 /// Handles `GET /location/:id`, reading `id` from the path.
 pub fn get_location() -> RouteHandler {
     Box::new(
-        |req: &HttpRequest, res: &mut HttpResponse| match req.params.get("id") {
-            Some(id) => {
-                println!("User id =>{id}");
-                res.send(format!("location id: {id}"))
-            }
+        |req: &HttpRequest, res: &mut HttpResponse| match req.path_params.get("id") {
+            Some(id) => res.send(format!("location id: {id}")),
             None => {
                 res.status(400);
                 res.send("missing \"id\" path param");

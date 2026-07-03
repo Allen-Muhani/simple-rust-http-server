@@ -33,8 +33,11 @@ impl Route {
             return None;
         }
 
-        let mut pattern_segments = self.pattern.split('/');
-        let mut path_segments = path.split('/');
+        // Filtering out empty segments means "/user", "/user/", and
+        // "/user//" (or a doubled slash anywhere) all match the same way,
+        // instead of a stray "/" changing the segment count.
+        let mut pattern_segments = self.pattern.split('/').filter(|s| !s.is_empty());
+        let mut path_segments = path.split('/').filter(|s| !s.is_empty());
         let mut params = HashMap::new();
 
         loop {

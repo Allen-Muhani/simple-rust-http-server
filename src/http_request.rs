@@ -15,8 +15,13 @@ pub struct HttpRequest {
     pub path: String,
     /// Header fields as `(name, value)` pairs, in the order received.
     pub headers: Vec<(String, String)>,
-    /// Path or query parameters extracted for this request, keyed by name.
-    pub params: HashMap<String, String>,
+    /// Query string parameters (e.g. `?id=5` -> `{"id": "5"}`), parsed
+    /// directly from the request line.
+    pub query_params: HashMap<String, String>,
+    /// Path parameters captured from a route pattern (e.g. `/location/:id`
+    /// matching `/location/5` -> `{"id": "5"}`). Empty until the router
+    /// matches this request to a route and fills them in.
+    pub path_params: HashMap<String, String>,
     /// The request body, if any. Empty when no `Content-Length` was sent.
     pub body: String,
 }
@@ -56,8 +61,8 @@ impl HttpRequest {
         let raw_path = parts.next().unwrap_or("");
 
         // Split the query string (if any) off the path so `path` stays a
-        // plain route like "/users" and query params land in `params`.
-        let (path, params) = match raw_path.split_once('?') {
+        // plain route like "/users" and query params land in `query_params`.
+        let (path, query_params) = match raw_path.split_once('?') {
             Some((path, query)) => (path.to_string(), parse_query_string(query)),
             None => (raw_path.to_string(), HashMap::new()),
         };
@@ -69,7 +74,8 @@ impl HttpRequest {
             method,
             path,
             headers,
-            params,
+            query_params,
+            path_params: HashMap::new(),
             body,
         }))
     }
@@ -80,6 +86,17 @@ impl HttpRequest {
     /// match the shape of `T`.
     pub fn json<T: DeserializeOwned>(&self) -> Option<T> {
         serde_json::from_str(&self.body).ok()
+    }
+
+    /// Records path parameters captured by a matched route (e.g.
+    /// `/location/:id` matching `/location/5` captures `id -> "5"`).
+    ///
+    /// A no-op if `path_params` is empty, i.e. the matched route's pattern
+    /// had no `:param` segments to capture.
+    pub fn set_path_params(&mut self, path_params: HashMap<String, String>) {
+        if !path_params.is_empty() {
+            self.path_params = path_params;
+        }
     }
 }
 
