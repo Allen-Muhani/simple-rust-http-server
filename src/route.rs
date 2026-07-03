@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::{Error};
 
 use crate::http_request::HttpRequest;
 use crate::http_response::HttpResponse;
@@ -9,6 +10,13 @@ use crate::method::Method;
 /// Receives the parsed request and a mutable response to populate. Must be
 /// `Send + Sync` since routes may be shared across connection-handling threads.
 pub type RouteHandler = Box<dyn Fn(&HttpRequest, &mut HttpResponse) + Send + Sync>;
+
+
+type Result<T> = std::result::Result<T, RouteError>;
+
+
+#[derive(Debug, Clone)]
+struct RouteError;
 
 /// Maps an HTTP method and path pattern to the handler that serves it.
 pub struct Route {
@@ -28,10 +36,12 @@ impl Route {
     /// segment starting with `:` (e.g. `:id`) captures whatever segment is
     /// in that position of `path`. Returns the captured path parameters on
     /// a match, or `None` if the method or segment count/literals differ.
-    pub fn matches(&self, method: &Method, path: &str) -> Option<HashMap<String, String>> {
+    pub fn matches(&self, method: &Method, path: &str) -> Result<HashMap<String, String>> {
         if Method::parse(&self.method) != *method {
-            return None;
+            return Err("Methods did not match");
         }
+
+        let x = 
 
         // Filtering out empty segments means "/user", "/user/", and
         // "/user//" (or a doubled slash anywhere) all match the same way,
@@ -40,20 +50,22 @@ impl Route {
         let mut path_segments = path.split('/').filter(|s| !s.is_empty());
         let mut params = HashMap::new();
 
-        loop {
-            match (pattern_segments.next(), path_segments.next()) {
-                (Some(pattern_segment), Some(path_segment)) => {
-                    match pattern_segment.strip_prefix(':') {
-                        Some(name) => {
-                            params.insert(name.to_string(), path_segment.to_string());
-                        }
-                        None if pattern_segment == path_segment => {}
-                        None => return None,
-                    }
+        while let (Some(pattern), Some(path)) = (pattern_segments.next(), path_segments.next()) {
+            if pattern == path {
+                continue;
+            }
+            match pattern.strip_prefix(':') {
+                Some(name) => {
+                    params.insert(name.to_string(), path.to_string());
                 }
-                (None, None) => return Some(params),
-                _ => return None,
+                None => return Err("Path param does not exist, or path did not match pattern!"),
             }
         }
+
+        if pattern_segments.next().is_some() || path_segments.next().is_some() {
+            return Err("Path not equal to pattern!!");
+        }
+
+        return Ok(params);
     }
 }
