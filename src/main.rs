@@ -1,13 +1,20 @@
-use std::{
-    io::{BufRead, BufReader},
-    net::{TcpListener, TcpStream},
-};
+use std::net::{TcpListener, TcpStream};
 
+mod handlers;
 mod http_request;
+mod http_response;
 mod method;
+mod route;
+mod router;
+
+use http_request::HttpRequest;
+use http_response::HttpResponse;
+use route::Route;
+use router::{build_routes, find_route};
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let routes = build_routes();
 
     for stream in listener.incoming() {
         let stream = match stream {
@@ -18,29 +25,39 @@ fn main() {
             }
         };
 
-        handle_connection(stream);
+        handle_connection(stream, &routes);
     }
 }
 
-/// Reads an incoming HTTP request from `stream` line by line and prints it.
+/// Reads an incoming HTTP request from `stream`, dispatches it to the
+/// matching route in `routes`, and writes the resulting response back.
 ///
-/// Lines are read until the first empty line, which marks the end of the
-/// HTTP request headers (the request line plus header fields).
-fn handle_connection(stream: TcpStream) {
-    let buf_reader = BufReader::new(&stream);
+/// Unmatched requests get a `404` response instead of a handler call.
+fn handle_connection(stream: TcpStream, routes: &[Route]) {
+    let mut request = match HttpRequest::from_stream(&stream) {
+        Ok(Some(request)) => request,
+        Ok(None) => return,
+        Err(e) => {
+            eprintln!("Failed to read request from connection: {e}");
+            return;
+        }
+    };
 
-    let mut http_request: Vec<String> = Vec::new();
+    let mut response = HttpResponse::default();
+    response.status(200);
 
-    for line in buf_reader.lines() {
-        match line {
-            Ok(line) if line.is_empty() => break,
-            Ok(line) => http_request.push(line),
-            Err(e) => {
-                eprint!("Failed to read line from connection: {e}");
-                return;
-            }
+    match find_route(routes, &request.method, &request.path) {
+        Some((route, path_params)) => {
+            request.params.extend(path_params);
+            (route.handler)(&request, &mut response);
+        }
+        None => {
+            response.status(404);
+            response.send("not found");
         }
     }
 
-    println!("request: {http_request:#?}");
+    if let Err(e) = response.write_to(&stream) {
+        eprintln!("Failed to write response to connection: {e}");
+    }
 }
