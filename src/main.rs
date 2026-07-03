@@ -31,10 +31,8 @@ fn main() {
 
 /// Reads an incoming HTTP request from `stream`, dispatches it to the
 /// matching route in `routes`, and writes the resulting response back.
-///
-/// Unmatched requests get a `404` response instead of a handler call.
 fn handle_connection(stream: TcpStream, routes: &[Route]) {
-    let mut request = match HttpRequest::from_stream(&stream) {
+    let request = match HttpRequest::from_stream(&stream) {
         Ok(Some(request)) => request,
         Ok(None) => return,
         Err(e) => {
@@ -43,6 +41,17 @@ fn handle_connection(stream: TcpStream, routes: &[Route]) {
         }
     };
 
+    let response = dispatch(routes, request);
+
+    if let Err(e) = response.write_to(&stream) {
+        eprintln!("Failed to write response to connection: {e}");
+    }
+}
+
+/// Routes `request` to the matching handler in `routes` and returns the
+/// resulting response. Unmatched requests get a `404` response instead of
+/// a handler call.
+fn dispatch(routes: &[Route], mut request: HttpRequest) -> HttpResponse {
     let mut response = HttpResponse::default();
     response.status(200);
 
@@ -57,7 +66,8 @@ fn handle_connection(stream: TcpStream, routes: &[Route]) {
         }
     }
 
-    if let Err(e) = response.write_to(&stream) {
-        eprintln!("Failed to write response to connection: {e}");
-    }
+    response
 }
+
+#[cfg(test)]
+mod tests;
