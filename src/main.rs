@@ -53,7 +53,12 @@ fn handle_connection(stream: TcpStream, routes: &[Route]) {
         Err(e) => {
             eprintln!("Failed to read request from connection: {e}");
             response.status(400);
-            response.send(e.to_string());
+            response.send(format!(
+                "Bad Request: the server could not read your request. \
+                 This usually means the request line or headers were \
+                 malformed, or the connection closed unexpectedly while \
+                 reading the body. Underlying error: {e}"
+            ));
             return write_response(&response, &stream);
         }
     };

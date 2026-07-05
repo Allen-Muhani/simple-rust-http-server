@@ -72,7 +72,13 @@ impl HttpRequest {
             None => (raw_path.to_string(), HashMap::new()),
         };
 
-        let (headers, content_length) = parse_headers(&mut lines)?;
+        let (headers, content_length) = match parse_headers(&mut lines) {
+            Ok((headers, content_length)) => (headers, content_length),
+            Err(e) => {
+                eprintln!("Failed to parse headers from connection: {e}");
+                return Err(e);
+            }
+        };
         let body = read_body(&mut reader, content_length)?;
 
         Ok(Some(Self {
