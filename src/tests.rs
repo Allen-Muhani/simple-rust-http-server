@@ -17,10 +17,20 @@ fn request(method: Method, path: &str) -> HttpRequest {
     }
 }
 
+/// Dispatches `req` the same way `handle_connection` does: starting from a
+/// `200` response that the matched handler (or a `404`/error path) may
+/// override.
+fn run(routes: &[Route], req: HttpRequest) -> HttpResponse {
+    let mut response = HttpResponse::default();
+    response.status(200);
+    dispatch(routes, req, &mut response);
+    response
+}
+
 #[test]
 fn health_check_returns_ok() {
     let routes = build_routes();
-    let response = dispatch(&routes, request(Method::Get, "/"));
+    let response = run(&routes, request(Method::Get, "/"));
 
     assert_eq!(response.status, 200);
     assert_eq!(response.body, "Service is live");
@@ -32,7 +42,7 @@ fn get_user_reads_query_param() {
     let mut req = request(Method::Get, "/user");
     req.query_params.insert("id".to_string(), "2".to_string());
 
-    let response = dispatch(&routes, req);
+    let response = run(&routes, req);
 
     assert_eq!(response.status, 200);
     assert_eq!(response.body, "user id: 2");
@@ -41,7 +51,7 @@ fn get_user_reads_query_param() {
 #[test]
 fn get_user_without_id_is_bad_request() {
     let routes = build_routes();
-    let response = dispatch(&routes, request(Method::Get, "/user"));
+    let response = run(&routes, request(Method::Get, "/user"));
 
     assert_eq!(response.status, 400);
 }
@@ -49,7 +59,7 @@ fn get_user_without_id_is_bad_request() {
 #[test]
 fn get_location_reads_path_param() {
     let routes = build_routes();
-    let response = dispatch(&routes, request(Method::Get, "/location/5"));
+    let response = run(&routes, request(Method::Get, "/location/5"));
 
     assert_eq!(response.status, 200);
     assert_eq!(response.body, "location id: 5");
@@ -61,7 +71,7 @@ fn create_user_reads_json_body() {
     let mut req = request(Method::Post, "/users");
     req.body = r#"{"name":"Alice"}"#.to_string();
 
-    let response = dispatch(&routes, req);
+    let response = run(&routes, req);
 
     assert_eq!(response.status, 201);
     assert_eq!(response.body, "created user: Alice");
@@ -73,7 +83,7 @@ fn create_user_rejects_invalid_json() {
     let mut req = request(Method::Post, "/users");
     req.body = "not json".to_string();
 
-    let response = dispatch(&routes, req);
+    let response = run(&routes, req);
 
     assert_eq!(response.status, 400);
 }
@@ -81,7 +91,7 @@ fn create_user_rejects_invalid_json() {
 #[test]
 fn unmatched_route_is_not_found() {
     let routes = build_routes();
-    let response = dispatch(&routes, request(Method::Get, "/nope"));
+    let response = run(&routes, request(Method::Get, "/nope"));
 
     assert_eq!(response.status, 404);
 }
@@ -94,8 +104,8 @@ fn trailing_and_doubled_slashes_still_match() {
     with_trailing_slash
         .query_params
         .insert("id".to_string(), "9".to_string());
-    assert_eq!(dispatch(&routes, with_trailing_slash).status, 200);
+    assert_eq!(run(&routes, with_trailing_slash).status, 200);
 
-    let response = dispatch(&routes, request(Method::Get, "/location//5"));
+    let response = run(&routes, request(Method::Get, "/location//5"));
     assert_eq!(response.body, "location id: 5");
 }

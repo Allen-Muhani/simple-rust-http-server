@@ -19,6 +19,11 @@ pub struct HttpResponse {
 
 impl HttpResponse {
     /// Sets the response body, converting `body` into a `String`.
+    ///
+    /// # Arguments
+    /// - `body` — the raw response body text.
+    ///
+    /// Returns nothing; sets `self.body`.
     pub fn send(&mut self, body: impl Into<String>) {
         self.body = body.into();
     }
@@ -26,8 +31,12 @@ impl HttpResponse {
     /// Serializes `value` as JSON into the body and sets the
     /// `Content-Type` header to `application/json`.
     ///
-    /// If serialization fails, the body is set to an empty string rather
-    /// than panicking.
+    /// # Arguments
+    /// - `value` — the value to serialize as the response body.
+    ///
+    /// Returns nothing; sets `self.body` and `self.headers`. If
+    /// serialization fails, the body is set to an empty string rather than
+    /// panicking.
     pub fn json<T: Serialize>(&mut self, value: &T) {
         self.headers
             .insert("Content-Type".into(), "application/json".into());
@@ -36,12 +45,21 @@ impl HttpResponse {
 
     /// Sets the HTTP status code.
     ///
-    /// Returns `&mut Self` so calls can chain, e.g.
+    /// # Arguments
+    /// - `code` — the status code to send, e.g. `200` or `404`.
+    ///
+    /// Returns nothing; sets `self.status`.
     pub fn status(&mut self, code: u16) {
         self.status = code;
     }
 
     /// Writes this response as raw HTTP bytes to `writer` (e.g. a `TcpStream`).
+    ///
+    /// # Arguments
+    /// - `writer` — the destination to write the status line, headers, and
+    ///   body to.
+    ///
+    /// Returns `Ok(())` on success, or `Err` if the underlying write fails.
     pub fn write_to(&self, mut writer: impl Write) -> io::Result<()> {
         let mut head = format!(
             "HTTP/1.1 {} {}\r\n",
@@ -59,6 +77,12 @@ impl HttpResponse {
 }
 
 /// Maps a status code to its standard reason phrase (e.g. `200` -> `"OK"`).
+///
+/// # Arguments
+/// - `status` — the status code to look up.
+///
+/// Returns the reason phrase, or `"Unknown"` if `status` isn't one of the
+/// codes this server sends.
 fn status_reason(status: u16) -> &'static str {
     match status {
         200 => "OK",

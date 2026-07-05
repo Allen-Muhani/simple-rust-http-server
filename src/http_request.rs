@@ -34,9 +34,14 @@ impl HttpRequest {
     /// reads exactly `Content-Length` bytes of body if that header was sent.
     /// Query parameters on the path (e.g. `?id=5`) are parsed into `params`.
     ///
-    /// Returns `Ok(None)` if the connection had no request line to read
-    /// (e.g. the client closed the connection immediately). Returns `Err`
-    /// if reading from `stream` fails or a header line isn't valid UTF-8.
+    /// # Arguments
+    /// - `stream` — the client connection to read the request from.
+    ///
+    /// Returns `Ok(Some(request))` on a successfully parsed request,
+    /// `Ok(None)` if the connection had no request line to read (e.g. the
+    /// client closed the connection immediately or sent a blank line), or
+    /// `Err` if reading from `stream` fails or a header line isn't valid
+    /// UTF-8.
     pub fn from_stream(stream: &TcpStream) -> Result<Option<Self>> {
         let mut reader = BufReader::new(stream);
         let mut lines = reader.by_ref().lines();
@@ -82,8 +87,9 @@ impl HttpRequest {
 
     /// Deserializes the request body as JSON into `T`.
     ///
-    /// Returns `None` if the body is empty, not valid JSON, or doesn't
-    /// match the shape of `T`.
+    /// Takes no arguments beyond `self` (deserializes `self.body`). Returns
+    /// `Some(T)` on success, or `None` if the body is empty, not valid JSON,
+    /// or doesn't match the shape of `T`.
     pub fn json<T: DeserializeOwned>(&self) -> Option<T> {
         serde_json::from_str(&self.body).ok()
     }
@@ -91,8 +97,13 @@ impl HttpRequest {
     /// Records path parameters captured by a matched route (e.g.
     /// `/location/:id` matching `/location/5` captures `id -> "5"`).
     ///
-    /// A no-op if `path_params` is empty, i.e. the matched route's pattern
-    /// had no `:param` segments to capture.
+    /// # Arguments
+    /// - `path_params` — the parameters captured by
+    ///   [`crate::route::Route::matches_path`], or an empty map if the
+    ///   matched route's pattern had none.
+    ///
+    /// Returns nothing; sets `self.path_params`, or leaves it unchanged (a
+    /// no-op) if `path_params` is empty.
     pub fn set_path_params(&mut self, path_params: HashMap<String, String>) {
         if !path_params.is_empty() {
             self.path_params = path_params;
@@ -102,8 +113,13 @@ impl HttpRequest {
 
 /// Parses a URL query string (e.g. `id=5&sort=asc`) into name/value pairs.
 ///
-/// Entries without an `=` are skipped rather than treated as an error.
+/// # Arguments
+/// - `query` — the raw query string, without the leading `?`.
+///
+/// Returns the parsed name/value pairs. Entries without an `=` are skipped
+/// rather than treated as an error; never fails.
 fn parse_query_string(query: &str) -> HashMap<String, String> {
+    println!("Parsing query string: {query}");
     query
         .split('&')
         .filter_map(|pair| pair.split_once('='))
@@ -111,9 +127,16 @@ fn parse_query_string(query: &str) -> HashMap<String, String> {
         .collect()
 }
 
-/// Reads header lines from `lines` until the blank line that ends them,
-/// returning the collected headers and the `Content-Length` value seen
-/// (`0` if the header wasn't present).
+/// Reads header lines from `lines` until the blank line that ends them.
+///
+/// # Arguments
+/// - `lines` — an iterator over the raw lines following the request line,
+///   not yet consumed past the header block.
+///
+/// Returns `Ok` with the collected `(name, value)` headers, in the order
+/// received, and the `Content-Length` value seen (`0` if the header wasn't
+/// present or didn't parse as a number). Returns `Err` if reading a line
+/// from `lines` fails.
 fn parse_headers(
     lines: &mut impl Iterator<Item = Result<String>>,
 ) -> Result<(Vec<(String, String)>, usize)> {
@@ -142,9 +165,14 @@ fn parse_headers(
 
 /// Reads exactly `content_length` bytes from `reader` as the request body.
 ///
-/// Returns an empty string without reading anything if `content_length` is
-/// `0`, so bodyless requests (e.g. `GET`) never block waiting for bytes
-/// that will never arrive.
+/// # Arguments
+/// - `reader` — the stream positioned right after the header block.
+/// - `content_length` — the byte count from the `Content-Length` header.
+///
+/// Returns `Ok("")` without reading anything if `content_length` is `0`, so
+/// bodyless requests (e.g. `GET`) never block waiting for bytes that will
+/// never arrive. Otherwise returns `Ok` with the body decoded as UTF-8
+/// (lossily, replacing invalid sequences), or `Err` if the read fails.
 fn read_body(reader: &mut impl Read, content_length: usize) -> Result<String> {
     if content_length == 0 {
         return Ok(String::new());
